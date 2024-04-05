@@ -1,0 +1,121 @@
+﻿@page "/playlist/{PlaylistId:long}"
+@attribute [Authorize]
+
+@using Chinook.Models
+@using Chinook.Services
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims;
+
+<h1>Playlist <strong>@Playlist.Name</strong></h1>
+
+@if (!string.IsNullOrWhiteSpace(InfoMessage))
+{
+    <div class="alert alert-info fade show">
+        <div class="d-flex align-items-start">
+            <div class="flex-grow-1">
+                @InfoMessage
+            </div>
+            <button type="button" class="btn-close" aria-label="Close" @onclick="CloseInfoMessage"></button>
+        </div>
+    </div>
+}
+
+@if (Playlist == null)
+{
+     <Loading />
+}
+else
+{
+    <table class="table table-striped table-hover table-sm">
+        <thead>
+            <tr>
+                <th>Track</th>
+                <th></th>
+        </tr>
+        </thead>
+        <tbody>
+            @foreach (var track in Playlist.Tracks)
+            {
+                <tr>
+                    <td>@track.ArtistName - @track.AlbumTitle - @track.TrackName</td>
+                    <td>
+                        <div class="d-flex">
+                            @if (Playlist.Name != "My favorite tracks")
+                            {
+                                @if (track.IsFavorite)
+                                {
+                                    <a href="#" class="m-1" title="Unark as favorite" @onclick="@(() => UnfavoriteTrack(track.TrackId))" @onclick:preventDefault><i class="bi bi-star-fill"></i></a>
+                                }
+                                else
+                                {
+                                    <a href="#" class="m-1" title="Mark as favorite" @onclick="@(() => FavoriteTrack(track.TrackId))" @onclick:preventDefault><i class="bi bi-star"></i></a>
+                                }
+
+                            }
+                            <a href="#" class="m-1" title="Remove from this playlist" @onclick="@(() => RemoveTrack(track.TrackId))" @onclick:preventDefault><i class="bi bi-trash"></i></a>
+                        </div>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter] public long PlaylistId { get; set; }
+    [Parameter] public EventCallback<string> PlaylistChanged { get; set; }
+    [Inject] IPlaylistService playlistService { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> authenticationState { get; set; }
+
+    private Chinook.ClientModels.Playlist Playlist;
+    private string CurrentUserId;
+    private string InfoMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        CurrentUserId = await GetUserId();
+
+        await InvokeAsync(StateHasChanged);
+
+        Playlist = await playlistService.GetPlayListByIdAsync(PlaylistId, CurrentUserId);
+    }
+
+    private async Task<string> GetUserId()
+    {
+        var user = (await authenticationState).User;
+        var userId = user.FindFirst(u => u.Type.Contains(ClaimTypes.NameIdentifier))?.Value;
+        return userId;
+    }
+
+    private async Task FavoriteTrack(long trackId)
+    {
+        var track = Playlist.Tracks.FirstOrDefault(t => t.TrackId == trackId);
+
+        string playlistName = "My favorite tracks";
+        await playlistService.AddTrackToPlaylistAsync(trackId, playlistName, CurrentUserId);
+
+        InfoMessage = $"Track {track.ArtistName} - {track.AlbumTitle} - {track.TrackName} added to playlist Favorites.";
+    }
+
+    private async Task UnfavoriteTrack(long trackId)
+    {
+        var track = Playlist.Tracks.FirstOrDefault(t => t.TrackId == trackId);
+        string playlistName = "My favorite tracks";
+        await playlistService.RemoveTrackFromPlaylistAsync(trackId, playlistName, CurrentUserId);
+
+        InfoMessage = $"Track {track.ArtistName} - {track.AlbumTitle} - {track.TrackName} removed from playlist Favorites.";
+    }
+
+    private async Task RemoveTrack(long trackId)
+    {
+        // TODO
+        
+        CloseInfoMessage();
+    }
+
+    private void CloseInfoMessage()
+    {
+        InfoMessage = "";
+    }
+
+}
